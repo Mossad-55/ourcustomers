@@ -1,51 +1,75 @@
-# Copyright (c) Streamlit Inc. (2018-2022) Snowflake Inc. (2022)
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+import time
 
 import streamlit as st
-from streamlit.logger import get_logger
+from pymongo import MongoClient
+from bson import ObjectId
+import pandas as pd
 
-LOGGER = get_logger(__name__)
+connection_string = "mongodb+srv://mosad5:ScOrp555@matag-customers.d4c2idw.mongodb.net/?retryWrites=true&w=majority&ssl=true&ssl_cert_reqs=CERT_NONE"
+client = MongoClient(connection_string)
 
 
-def run():
+def create_document(collection, name, phone, address, rate):
+    # Check if the document with the same name or phone number already exists
+    existing_document = collection.find_one({"$or": [{"name": name}, {"phone": phone}]})
+
+    if existing_document:
+        st.warning("Document with the same name or phone number already exists!")
+    else:
+        document = {
+            "name": name,
+            "phone": phone,
+            "address": address,
+            "rate": rate
+        }
+        collection.insert_one(document)
+        st.success("Customer created successfully!")
+
+
+def delete_document(collection, name):
+    collection.delete_one({"name": name})
+
+
+def main():
     st.set_page_config(
-        page_title="Hello",
+        page_title="MATAG Company",
         page_icon="👋",
     )
 
-    st.write("# Welcome to Streamlit! 👋")
+    st.title("MATAG Company")
 
-    st.sidebar.success("Select a demo above.")
+    db = client.customers
+    collection = db.People
 
-    st.markdown(
-        """
-        Streamlit is an open-source app framework built specifically for
-        Machine Learning and Data Science projects.
-        **👈 Select a demo from the sidebar** to see some examples
-        of what Streamlit can do!
-        ### Want to learn more?
-        - Check out [streamlit.io](https://streamlit.io)
-        - Jump into our [documentation](https://docs.streamlit.io)
-        - Ask a question in our [community
-          forums](https://discuss.streamlit.io)
-        ### See more complex demos
-        - Use a neural net to [analyze the Udacity Self-driving Car Image
-          Dataset](https://github.com/streamlit/demo-self-driving)
-        - Explore a [New York City rideshare dataset](https://github.com/streamlit/demo-uber-nyc-pickups)
-    """
-    )
+    page = st.sidebar.selectbox("Select Operation", ["All Customers", "Add Customer", "Delete Customer"])
+
+    if page == "All Customers":
+        st.header("Our Customers:")
+        result = collection.find({})
+        data = [doc for doc in result]
+        df = pd.DataFrame(data)
+        st.table(df)
+
+    elif page == "Add Customer":
+        st.header("Please enter the following data:")
+        name = st.text_input("Name:")
+        phone = st.text_input("Phone:")
+        address = st.text_input("Address:")
+        rate = st.slider("Rate", 0.0, 5.0, 0.0)
+
+        if st.button("Create"):
+            create_document(collection, name, phone, address, rate)
+
+    elif page == "Delete Customer":
+        st.header("Delete a Customer:")
+        all_names = [doc["name"] for doc in collection.find({}, {"name": 1})]
+        selected_name = st.selectbox("Select a Name to Delete", all_names)
+
+        if st.button("Delete"):
+            delete_document(collection, selected_name)
+            st.success(f"Record for {selected_name} deleted successfully!")
+            st.rerun()
 
 
-if __name__ == "__main__":
-    run()
+if __name__ == '__main__':
+    main()
